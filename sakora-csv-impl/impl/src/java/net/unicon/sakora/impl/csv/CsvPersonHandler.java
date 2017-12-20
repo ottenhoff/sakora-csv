@@ -18,6 +18,10 @@
  */
 package net.unicon.sakora.impl.csv;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -31,9 +35,11 @@ import net.unicon.sakora.api.csv.model.SakoraLog;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.sakaiproject.db.api.SqlService;
 import org.sakaiproject.genericdao.api.search.Restriction;
 import org.sakaiproject.genericdao.api.search.Search;
 import org.sakaiproject.id.api.IdManager;
+import org.sakaiproject.user.api.User;
 import org.sakaiproject.user.api.UserAlreadyDefinedException;
 import org.sakaiproject.user.api.UserEdit;
 import org.sakaiproject.user.api.UserIdInvalidException;
@@ -65,6 +71,7 @@ public class CsvPersonHandler extends CsvHandlerBase {
 	private static final String ID_FIELD_NAME = "id";
 
 	private IdManager idManager;
+	private SqlService sqlService;
 	private List<String> optionalFieldNames = new ArrayList<String>() {{
 		add(ID_FIELD_NAME);
 	}};
@@ -95,14 +102,37 @@ public class CsvPersonHandler extends CsvHandlerBase {
 			String type = line[5];
 			Map<String,String> optionalFields = getOptionalFields(line, 6);
 
+			String immutableId = null;
+			if ( optionalFields.containsKey(ID_FIELD_NAME) ) {
+				immutableId = optionalFields.get(ID_FIELD_NAME);
+			}
+
 			String existingId = null;
 			String newId = null;
+			
+			// First try to get it with their immutableId
+			if (immutableId != null) {
+				try {
+					existingId = userDirService.getUser(immutableId).getId();
+				}
+				catch (UserNotDefinedException unde) {
+					String userFoundByProperty = getUserByImmutableId(immutableId);
+					if (userFoundByProperty != null) {
+						try {
+							existingId = userDirService.getUser(userFoundByProperty).getId();
+						} catch (UserNotDefinedException e) {
+							log.info("Could not find user by property: " + immutableId);
+						}
+					}
+				}
+			}
 
-			// why doesn't UserDirectoryService have a userExists type method?
-			try {
-				existingId = userDirService.getUserId(eid);
-			} catch (UserNotDefinedException unde) {
-			    // empty on purpose
+			if (existingId == null) {
+				try {
+					existingId = userDirService.getUserByEid(eid).getId();
+				} catch (UserNotDefinedException unde) {
+				    // empty on purpose
+				}
 			}
 
 			try {
@@ -125,8 +155,17 @@ public class CsvPersonHandler extends CsvHandlerBase {
 					edit.setType(type);
 					changed = true;
 				} else {
+					// If the user changed eid, we need to re-map
+					User oldUser = userDirService.getUser(existingId);
+					if (!strEquals(eid, oldUser.getEid())) {
+						log.info("User eid remap found: " + oldUser.getEid() + " to " + eid);
+						userDirService.updateUserEid(oldUser.getId(), eid);
+						changed = true;
+					}
+
 					edit = userDirService.editUser(existingId);
-					// check if the user has changed, only update if the record has changed
+
+					// check if the user has changed, only update if the record has changed					
 					if (!strEquals(firstName, edit.getFirstName())) {
 					    edit.setFirstName(firstName);
 					    changed = true;
@@ -153,7 +192,7 @@ public class CsvPersonHandler extends CsvHandlerBase {
 					log.debug("Processing optional fields for user with eid [" + eid  + "]: " + optionalFields);
 					for ( String fieldName: optionalFields.keySet() ) {
 						if ( ID_FIELD_NAME.equals(fieldName) ) {
-							continue;
+							//continue;
 						}
 						String fieldValue = optionalFields.get(fieldName);
 						if ( fieldValue == null || "".equals(fieldValue) ) {
@@ -164,6 +203,10 @@ public class CsvPersonHandler extends CsvHandlerBase {
 						} else {
 						    String currentVal = edit.getPropertiesEdit().getProperty(fieldName);
 						    if (currentVal == null || strEquals(fieldValue, currentVal)) {
+						    		// TODO: if this is the immutableId field, then perform a uds remap
+						    		if (strEquals(fieldName, ID_FIELD_NAME)) {
+						    			//userDirService.updateUserEid(edit.getEid(), eid);
+						    		}
 						        edit.getPropertiesEdit().addProperty(fieldName, fieldValue);
 						        changed = true;
 						    }
@@ -335,6 +378,54 @@ public class CsvPersonHandler extends CsvHandlerBase {
 	                    + updates + " items and removed " + deletes));
 	}
 
+	private String getUserByImmutableId(String id) {
+		Connection conn = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+
+		try {
+			conn = sqlService.borrowConnection();
+			conn.setReadOnly(true);
+
+			ps = conn.prepareStatement("SELECT USER_ID FROM SAKAI_USER_PROPERTY WHERE NAME=? AND VALUE=? ");
+			ps.setString(1, ID_FIELD_NAME);
+			ps.setString(2, id);
+			rs = ps.executeQuery();
+
+			if (rs.first()) {
+				return rs.getString(1);
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		finally {
+			if (rs != null) {
+				try {
+					rs.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+			if (ps != null) {
+				try {
+					ps.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+			if (conn != null) {
+				try {
+					conn.setReadOnly(false);
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+				sqlService.returnConnection(conn);
+			}
+		}
+
+		return null;
+	}
+
 	public void setDeleteUsers(boolean deleteUsers) {
 	    log.warn("SakoraCSV: deleteUsers is no longer supported, use userRemoveMode option instead (see docs for details)");
 	}
@@ -346,7 +437,7 @@ public class CsvPersonHandler extends CsvHandlerBase {
 	public void setSuspended(String suspended) {
 		this.suspended = suspended;
 	}
-	
+
 	public List<String> getOptionalFieldNames() {
 		return optionalFieldNames;
 	}
@@ -361,6 +452,10 @@ public class CsvPersonHandler extends CsvHandlerBase {
 
 	public void setIdManager(IdManager idManager) {
 		this.idManager = idManager;
+	}
+
+	public void setSqlService(SqlService sqlService) {
+		this.sqlService = sqlService;
 	}
 
 }

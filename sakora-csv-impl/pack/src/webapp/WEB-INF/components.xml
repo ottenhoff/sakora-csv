@@ -218,6 +218,7 @@
 		<property name="idManager" ref="org.sakaiproject.id.api.IdManager" />
 		<property name="suspended" value="suspended" />
 		<property name="csvFileName" value="people.csv" />
+		<property name="sqlService" ref="org.sakaiproject.db.api.SqlService"/>
 	</bean>
 
 	<bean id="net.unicon.sakora.impl.csv.CsvSectionMembershipHandler"
