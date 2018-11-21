@@ -103,8 +103,8 @@ public class CsvPersonHandler extends CsvHandlerBase {
 			Map<String,String> optionalFields = getOptionalFields(line, 6);
 
 			String immutableId = null;
-			if ( optionalFields.containsKey(ID_FIELD_NAME) ) {
-				immutableId = optionalFields.get(ID_FIELD_NAME);
+			if ( optionalFields.containsKey("ST_NUM") ) {
+				immutableId = optionalFields.get("ST_NUM");
 			}
 
 			String existingId = null;
@@ -112,11 +112,7 @@ public class CsvPersonHandler extends CsvHandlerBase {
 			
 			// First try to get it with their immutableId
 			if (immutableId != null) {
-				try {
-					existingId = userDirService.getUser(immutableId).getId();
-				}
-				catch (UserNotDefinedException unde) {
-					String userFoundByProperty = getUserByImmutableId(immutableId);
+					String userFoundByProperty = getUserByImmutableId(immutableId, "ST_NUM");
 					if (userFoundByProperty != null) {
 						try {
 							existingId = userDirService.getUser(userFoundByProperty).getId();
@@ -124,7 +120,6 @@ public class CsvPersonHandler extends CsvHandlerBase {
 							log.info("Could not find user by property: " + immutableId);
 						}
 					}
-				}
 			}
 
 			if (existingId == null) {
@@ -378,7 +373,7 @@ public class CsvPersonHandler extends CsvHandlerBase {
 	                    + updates + " items and removed " + deletes));
 	}
 
-	private String getUserByImmutableId(String id) {
+	private String getUserByImmutableId(String value, String key) {
 		Connection conn = null;
 		PreparedStatement ps = null;
 		ResultSet rs = null;
@@ -388,8 +383,8 @@ public class CsvPersonHandler extends CsvHandlerBase {
 			conn.setReadOnly(true);
 
 			ps = conn.prepareStatement("SELECT USER_ID FROM SAKAI_USER_PROPERTY WHERE NAME=? AND VALUE=? ");
-			ps.setString(1, ID_FIELD_NAME);
-			ps.setString(2, id);
+			ps.setString(1, key);
+			ps.setString(2, value);
 			rs = ps.executeQuery();
 
 			if (rs.first()) {
