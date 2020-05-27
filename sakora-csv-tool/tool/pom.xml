@@ -24,7 +24,7 @@
     <parent>
         <artifactId>sakora-csv</artifactId>
         <groupId>net.unicon</groupId>
-        <version>13-SNAPSHOT</version>
+        <version>19-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -53,17 +53,18 @@
         <dependency>
             <groupId>org.sakaiproject.scheduler</groupId>
             <artifactId>scheduler-api</artifactId>
-            <version>2.7.0</version>
         </dependency>
 
         
         <dependency>
             <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
+            <artifactId>javax.servlet-api</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.quartz-scheduler</groupId>
             <artifactId>quartz</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>commons-logging</groupId>
