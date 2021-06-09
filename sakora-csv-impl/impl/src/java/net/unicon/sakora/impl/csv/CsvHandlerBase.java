@@ -215,6 +215,9 @@ public abstract class CsvHandlerBase implements CsvHandler {
 		} catch (IOException ioe) {
 			dao.create(new SakoraLog(this.getClass().toString(), ioe.getLocalizedMessage()));
 			log.warn("SakoraCSV reader failed to read from file [" + csvPath + "]: "+ioe, ioe);
+		} catch (com.opencsv.exceptions.CsvValidationException inval) {
+			dao.create(new SakoraLog(this.getClass().toString(), inval.getLocalizedMessage()));
+			log.warn("SakoraCSV validation failed to read from file [" + csvPath + "]: "+ inval, inval);
 		}
 		return fileWasRead;
 	}
@@ -273,6 +276,9 @@ public abstract class CsvHandlerBase implements CsvHandler {
 		        // can be thrown by methods in readInputLine but generally this is unlikely to happen because most (or all) handlers catch this exception themselves
 		        dao.create(new SakoraLog(this.getClass().toString(), getClass().getSimpleName() + ":: " + ine.getLocalizedMessage()));
 		        log.error(getClass().getSimpleName() + ":: " + ine.getLocalizedMessage(), ine);
+		    } catch (com.opencsv.exceptions.CsvValidationException inval) {
+		        dao.create(new SakoraLog(this.getClass().toString(), inval.getLocalizedMessage()));
+		        log.warn("SakoraCSV validation failed on file", inval);
 		    }
 		    finally {
 		        logoutFromSakai();
